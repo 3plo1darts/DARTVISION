@@ -1,0 +1,7 @@
+{
+  "name": "DartVision Pro",
+  "description": "Sistema di riconoscimento e punteggio freccette mobile-only basato su AI e Gemini 3.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
