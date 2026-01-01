@@ -1,24 +1,28 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+
+import { GoogleGenAI, Type } from "@google/genai";
 import { VisionResponse } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const scoringSchema: Schema = {
+// Define the schema for dart scoring. 
+// Added 'message' property to ensure consistency with the VisionResponse interface.
+const scoringSchema = {
   type: Type.OBJECT,
   properties: {
-    detected: { type: Type.BOOLEAN, description: "True se il bersaglio è visibile." },
+    detected: { type: Type.BOOLEAN },
+    message: { type: Type.STRING, description: "A brief summary of the detection result." },
     darts: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
-          zone: { type: Type.STRING, description: "Esempio: 'T20', 'D15', 'S5', 'BULL', 'OUTER'." },
-          score: { type: Type.NUMBER, description: "Valore numerico." },
+          zone: { type: Type.STRING, description: "Settore e anello (es. 'T20', 'D16', 'S1', 'BULL')." },
+          score: { type: Type.NUMBER },
           coordinates: {
             type: Type.OBJECT,
             properties: {
-              x: { type: Type.NUMBER, description: "Coordinata X della PUNTA (0-1000)." },
-              y: { type: Type.NUMBER, description: "Coordinata Y della PUNTA (0-1000)." }
+              x: { type: Type.NUMBER, description: "X della punta (0-1000)." },
+              y: { type: Type.NUMBER, description: "Y della punta (0-1000)." }
             },
             required: ["x", "y"]
           }
@@ -26,19 +30,10 @@ const scoringSchema: Schema = {
         required: ["zone", "score", "coordinates"]
       }
     },
-    totalScore: { type: Type.NUMBER }
+    totalScore: { type: Type.NUMBER },
+    confidence: { type: Type.NUMBER, description: "0.0 a 1.0" }
   },
-  required: ["detected", "darts", "totalScore"]
-};
-
-const calibrationSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    detected: { type: Type.BOOLEAN },
-    sectorsIdentified: { type: Type.BOOLEAN },
-    message: { type: Type.STRING }
-  },
-  required: ["detected", "sectorsIdentified", "message"]
+  required: ["detected", "message", "darts", "totalScore"]
 };
 
 export const analyzeCalibration = async (base64Image: string): Promise<VisionResponse> => {
@@ -49,13 +44,20 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: "Verifica se il bersaglio da freccette è centrato e ben visibile. Ignora eventuali freccette presenti. Rispondi in JSON." }
+          { text: "Il bersaglio è centrato? I numeri 1-20 sono leggibili? Rispondi in JSON." }
         ]
       },
       config: {
         responseMimeType: "application/json",
-        responseSchema: calibrationSchema,
-        systemInstruction: "Sei un esperto di installazioni per tornei di freccette. Assicurati che l'inquadratura permetta di distinguere i fili (spider) del bersaglio."
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            detected: { type: Type.BOOLEAN },
+            sectorsIdentified: { type: Type.BOOLEAN },
+            message: { type: Type.STRING }
+          },
+          required: ["detected", "sectorsIdentified", "message"]
+        }
       }
     });
     return JSON.parse(response.text || '{}') as VisionResponse;
@@ -68,23 +70,32 @@ export const analyzeScore = async (base64Image: string): Promise<VisionResponse>
   try {
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3-pro-preview", // Passaggio al modello Pro per massima precisione
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: "Individua TUTTE le freccette conficcate nel bersaglio. Per ogni freccetta: 1. Identifica il corpo. 2. Segui la direzione fino alla punta esatta. 3. Determina il settore (1-20) e l'anello (Singolo, Doppio, Triplo, Bullseye). Calcola il punteggio totale sommando le freccette rilevate. Rispondi SOLO in JSON." }
+          { text: `Analisi Geometrica Bersaglio:
+          1. Orienta il bersaglio (20 in alto, 3 in basso, 6 a destra, 11 a sinistra).
+          2. Individua ogni freccetta. Segui l'asta fino al punto esatto in cui la PUNTA tocca il bersaglio.
+          3. Distingui con estrema cura tra:
+             - Anello dei Tripli (stretto, circa a metà raggio)
+             - Anello dei Doppi (stretto, sul bordo esterno)
+             - Bullseye (centro rosso, 50 pt) e Outer Bull (anello verde, 25 pt)
+          4. Se la punta tocca il filo metallico (spider), assegna il punteggio del settore in cui la punta è maggiormente inserita.
+          Restituisci JSON con coordinate X,Y (0-1000) della punta.` }
         ]
       },
       config: {
-        thinkingConfig: { thinkingBudget: 4000 }, // Aggiunto budget di ragionamento per la precisione millimetrica
+        thinkingConfig: { thinkingBudget: 16000 }, // Budget elevato per analisi spaziale profonda
         responseMimeType: "application/json",
         responseSchema: scoringSchema,
-        systemInstruction: "Sei un arbitro ufficiale di freccette (PDC). La tua precisione deve essere assoluta, specialmente tra l'anello dei tripli e i settori singoli adiacenti. Analizza i pixel attorno alla punta per decidere il punteggio."
+        systemInstruction: "Sei un arbitro professionista di freccette. La tua missione è la precisione millimetrica. Non inventare freccette se non sono chiaramente conficcate. Ignora le freccette che sono cadute o non toccano il bersaglio."
       }
     });
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
-    console.error("Errore analisi:", error);
-    return { detected: false, message: "Errore analisi", totalScore: 0, darts: [] };
+    console.error("Errore analisi Pro:", error);
+    // Fixed: Added missing 'message' property to satisfy the VisionResponse interface.
+    return { detected: false, message: "Errore durante l'analisi del punteggio", totalScore: 0, darts: [] };
   }
 };
