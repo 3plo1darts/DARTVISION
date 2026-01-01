@@ -1,23 +1,20 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { VisionResponse } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Define the schema for dart scoring. 
-// Added 'message' property to ensure consistency with the VisionResponse interface.
 const scoringSchema = {
   type: Type.OBJECT,
   properties: {
-    detected: { type: Type.BOOLEAN },
-    message: { type: Type.STRING, description: "A brief summary of the detection result." },
+    detected: { type: Type.BOOLEAN, description: "True se il bersaglio è visibile." },
+    message: { type: Type.STRING, description: "Descrizione dello stato corrente." },
     darts: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
           zone: { type: Type.STRING, description: "Settore e anello (es. 'T20', 'D16', 'S1', 'BULL')." },
-          score: { type: Type.NUMBER },
+          score: { type: Type.NUMBER, description: "Valore numerico del tiro." },
           coordinates: {
             type: Type.OBJECT,
             properties: {
@@ -30,8 +27,8 @@ const scoringSchema = {
         required: ["zone", "score", "coordinates"]
       }
     },
-    totalScore: { type: Type.NUMBER },
-    confidence: { type: Type.NUMBER, description: "0.0 a 1.0" }
+    totalScore: { type: Type.NUMBER, description: "Somma dei punteggi delle freccette visibili." },
+    confidence: { type: Type.NUMBER, description: "Livello di certezza del rilevamento (0-1)." }
   },
   required: ["detected", "message", "darts", "totalScore"]
 };
@@ -44,7 +41,7 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: "Il bersaglio è centrato? I numeri 1-20 sono leggibili? Rispondi in JSON." }
+          { text: "Analizza la posizione del bersaglio. È centrato? I numeri sono leggibili? Rispondi in JSON." }
         ]
       },
       config: {
@@ -62,7 +59,7 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
     });
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
-    return { detected: false, message: "Errore calibrazione", sectorsIdentified: false };
+    return { detected: false, message: "Errore durante la calibrazione ottica.", sectorsIdentified: false };
   }
 };
 
@@ -70,32 +67,37 @@ export const analyzeScore = async (base64Image: string): Promise<VisionResponse>
   try {
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", // Passaggio al modello Pro per massima precisione
+      model: "gemini-3-pro-preview",
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: `Analisi Geometrica Bersaglio:
-          1. Orienta il bersaglio (20 in alto, 3 in basso, 6 a destra, 11 a sinistra).
-          2. Individua ogni freccetta. Segui l'asta fino al punto esatto in cui la PUNTA tocca il bersaglio.
-          3. Distingui con estrema cura tra:
-             - Anello dei Tripli (stretto, circa a metà raggio)
-             - Anello dei Doppi (stretto, sul bordo esterno)
-             - Bullseye (centro rosso, 50 pt) e Outer Bull (anello verde, 25 pt)
-          4. Se la punta tocca il filo metallico (spider), assegna il punteggio del settore in cui la punta è maggiormente inserita.
-          Restituisci JSON con coordinate X,Y (0-1000) della punta.` }
+          { text: `ISTRUZIONI ARBITRO PDC:
+          1. Identifica il centro esatto (BULLSEYE) per calibrare lo spazio.
+          2. Orienta i settori (20 è l'apice verticale).
+          3. Per ogni freccetta conficcata:
+             - Individua l'asta e seguila fino alla punta metallica.
+             - Determina se la punta è nel settore Singolo (S), Doppio (D) o Triplo (T).
+             - Sii estremamente pignolo sui fili metallici (spider): se la punta è all'interno del filo del triplo, è T.
+          4. Se una freccetta ne copre un'altra, usa la prospettiva per stimare la posizione della punta coperta.
+          RESTITUISCI SOLO JSON.` }
         ]
       },
       config: {
-        thinkingConfig: { thinkingBudget: 16000 }, // Budget elevato per analisi spaziale profonda
+        thinkingConfig: { thinkingBudget: 20000 },
+        maxOutputTokens: 25000,
         responseMimeType: "application/json",
         responseSchema: scoringSchema,
-        systemInstruction: "Sei un arbitro professionista di freccette. La tua missione è la precisione millimetrica. Non inventare freccette se non sono chiaramente conficcate. Ignora le freccette che sono cadute o non toccano il bersaglio."
+        systemInstruction: "Sei un sistema di visione computerizzata ad alta precisione per tornei di freccette. La tua analisi deve essere oggettiva e millimetrica. Ignora freccette cadute a terra."
       }
     });
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
-    console.error("Errore analisi Pro:", error);
-    // Fixed: Added missing 'message' property to satisfy the VisionResponse interface.
-    return { detected: false, message: "Errore durante l'analisi del punteggio", totalScore: 0, darts: [] };
+    console.error("Pro Analysis Error:", error);
+    return { 
+      detected: false, 
+      message: "L'AI ha riscontrato un problema nell'analisi spaziale.", 
+      totalScore: 0, 
+      darts: [] 
+    };
   }
 };

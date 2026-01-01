@@ -11,7 +11,7 @@ interface CameraFeedProps {
 export const CameraFeed: React.FC<CameraFeedProps> = ({ 
   onFrameCapture, 
   isActive, 
-  intervalMs = 3500, // Intervallo aumentato per permettere a Gemini Pro di "pensare"
+  intervalMs = 4000, // Tempo ottimizzato per Gemini 3 Pro con alto budget di pensiero
   detectedDarts = []
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,8 +24,9 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'environment',
-            width: { ideal: 3840 }, // Richiediamo 4K se disponibile per avere più dettaglio possibile
-            height: { ideal: 2160 }
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+            frameRate: { ideal: 30 }
           },
           audio: false
         });
@@ -53,17 +54,16 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
           const video = videoRef.current;
           const canvas = canvasRef.current;
           if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            // Aumentiamo a 1600px: è il "sweet spot" per Gemini Pro per vedere le punte senza eccessivo lag
-            const targetWidth = 1600;
+            // Inviamo un frame ad alta risoluzione (1920px) per massimizzare la precisione di Gemini Pro
+            const targetWidth = 1920;
             canvas.width = targetWidth;
             canvas.height = (targetWidth / video.videoWidth) * video.videoHeight;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: false });
             if (ctx) {
-              // Applichiamo un leggero sharpening via canvas se possibile (opzionale)
               ctx.imageSmoothingEnabled = true;
               ctx.imageSmoothingQuality = 'high';
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              onFrameCapture(canvas.toDataURL('image/jpeg', 0.85));
+              onFrameCapture(canvas.toDataURL('image/jpeg', 0.9));
             }
           }
         }
@@ -73,35 +73,60 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   }, [isActive, hasPermission, intervalMs, onFrameCapture]);
 
   return (
-    <div className="relative w-full h-full bg-black">
-      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+    <div className="relative w-full h-full bg-black overflow-hidden">
+      <video 
+        ref={videoRef} 
+        autoPlay 
+        playsInline 
+        muted 
+        className="w-full h-full object-cover transition-opacity duration-1000"
+        style={{ opacity: hasPermission ? 0.7 : 0 }}
+      />
       
-      {/* Markers ad alta visibilità */}
+      {/* HUD Overlay - Futuristic Design */}
+      <div className="absolute inset-0 pointer-events-none border-[30px] border-black/40">
+        <div className="w-full h-full border border-red-600/20 rounded-[40px] flex items-center justify-center relative">
+          {/* Laser corners */}
+          <div className="absolute top-0 left-0 w-12 h-12 border-t-2 border-l-2 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+          <div className="absolute top-0 right-0 w-12 h-12 border-t-2 border-r-2 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+          <div className="absolute bottom-0 left-0 w-12 h-12 border-b-2 border-l-2 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+          <div className="absolute bottom-0 right-0 w-12 h-12 border-b-2 border-r-2 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+          
+          {/* Central Target Circle */}
+          <div className="w-[85%] aspect-square border border-dashed border-white/20 rounded-full animate-[spin_60s_linear_infinite]" />
+          <div className="absolute w-8 h-8 border border-red-600/40 rounded-full" />
+        </div>
+      </div>
+
+      {/* Rilevamento Freccette */}
       {detectedDarts.map((dart, idx) => (
         <div 
           key={idx}
-          className="absolute z-30 pointer-events-none"
+          className="absolute z-40 pointer-events-none transition-all duration-500 ease-out"
           style={{
             left: `${(dart.coordinates?.x || 0) / 10}%`,
             top: `${(dart.coordinates?.y || 0) / 10}%`
           }}
         >
            <div className="flex flex-col items-center -translate-x-1/2 -translate-y-1/2">
-              <div className="w-4 h-4 border-2 border-white rounded-full bg-red-600 shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
-              <div className="mt-1 bg-black/90 text-white text-[12px] font-black px-2 py-0.5 rounded border border-red-600">
+              <div className="w-6 h-6 border-2 border-white rounded-full bg-red-600 shadow-[0_0_20px_#fff] flex items-center justify-center">
+                <div className="w-1 h-1 bg-white rounded-full" />
+              </div>
+              <div className="mt-2 bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-lg border border-white/40 whitespace-nowrap">
                 {dart.zone}
               </div>
            </div>
         </div>
       ))}
 
-      {/* Guida per l'utente */}
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-        <div className="w-[80%] aspect-square border-2 border-white/20 rounded-full border-dashed" />
-        <div className="absolute top-10 text-white/40 text-[10px] font-bold uppercase tracking-[0.3em]">
-          Allinea il bersaglio al cerchio
+      {!hasPermission && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black z-50">
+          <div className="flex flex-col items-center gap-4">
+             <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+             <p className="text-red-500 font-black text-xs uppercase tracking-widest animate-pulse">Inizializzazione Ottica...</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <canvas ref={canvasRef} className="hidden" />
     </div>
