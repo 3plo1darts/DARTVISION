@@ -1,5 +1,7 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Dart } from '../types';
+import { playDartBlip } from '../utils/sound';
 
 interface CameraFeedProps {
   onFrameCapture: (imageData: string) => void;
@@ -19,6 +21,15 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hasPermission, setHasPermission] = useState<boolean>(false);
+  const prevDartsCount = useRef(0);
+
+  // Audio Feedback quando viene rilevata una nuova freccetta
+  useEffect(() => {
+    if (detectedDarts.length > prevDartsCount.current) {
+      playDartBlip();
+    }
+    prevDartsCount.current = detectedDarts.length;
+  }, [detectedDarts]);
 
   useEffect(() => {
     const startCamera = async () => {
@@ -56,13 +67,12 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
           const video = videoRef.current;
           const canvas = canvasRef.current;
           if (video.readyState === video.HAVE_ENOUGH_DATA) {
-            // Se lowRes è attivo (calibrazione), usiamo 800px. Altrimenti 1920px per precisione gioco.
             const targetWidth = lowRes ? 800 : 1920;
             canvas.width = targetWidth;
             canvas.height = (targetWidth / video.videoWidth) * video.videoHeight;
             const ctx = canvas.getContext('2d', { alpha: false });
             if (ctx) {
-              ctx.imageSmoothingEnabled = !lowRes; // Risparmiamo CPU se lowRes
+              ctx.imageSmoothingEnabled = !lowRes;
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               onFrameCapture(canvas.toDataURL('image/jpeg', lowRes ? 0.6 : 0.9));
             }

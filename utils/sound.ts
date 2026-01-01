@@ -1,5 +1,6 @@
-// Simple oscillator beep for audio feedback without external assets
-export const playBeep = (duration: number = 200, frequency: number = 800, type: OscillatorType = 'sine') => {
+
+// Semplice oscillatore per feedback audio senza asset esterni
+export const playBeep = (duration: number = 200, frequency: number = 800, type: OscillatorType = 'sine', volume: number = 0.1) => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
 
@@ -15,16 +16,22 @@ export const playBeep = (duration: number = 200, frequency: number = 800, type: 
 
   oscillator.start();
   
-  // Fade out to avoid clicking
-  gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  // Fade out per evitare clic udibili
+  gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
   gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration / 1000);
 
   setTimeout(() => {
     oscillator.stop();
-  }, duration);
+    audioCtx.close();
+  }, duration + 100);
 };
 
 export const playSuccessChime = () => {
   playBeep(100, 600, 'sine');
   setTimeout(() => playBeep(200, 1000, 'sine'), 100);
+};
+
+export const playDartBlip = () => {
+  // Suono "cyber" molto corto e sottile
+  playBeep(50, 1800, 'sine', 0.05);
 };

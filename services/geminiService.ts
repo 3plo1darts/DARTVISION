@@ -7,8 +7,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const scoringSchema = {
   type: Type.OBJECT,
   properties: {
-    detected: { type: Type.BOOLEAN, description: "True se il bersaglio è visibile e correttamente inquadrato." },
-    message: { type: Type.STRING, description: "Feedback sullo stato del rilevamento." },
+    detected: { type: Type.BOOLEAN },
+    message: { type: Type.STRING },
     darts: {
       type: Type.ARRAY,
       items: {
@@ -28,8 +28,7 @@ const scoringSchema = {
         required: ["zone", "score", "coordinates"]
       }
     },
-    totalScore: { type: Type.NUMBER },
-    confidence: { type: Type.NUMBER }
+    totalScore: { type: Type.NUMBER }
   },
   required: ["detected", "message", "darts", "totalScore"]
 };
@@ -42,39 +41,37 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: "Bersaglio visibile? Rispondi JSON: {detected:bool, sectorsIdentified:bool, message:string}" }
+          { text: "Target present? JSON: {detected:bool, message:string}" }
         ]
       },
       config: {
         responseMimeType: "application/json",
-        // Usiamo un budget di pensiero nullo per la calibrazione per massimizzare la velocità
         thinkingConfig: { thinkingBudget: 0 }
       }
     });
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
-    return { detected: false, message: "Riprova...", sectorsIdentified: false };
+    return { detected: false, message: "Err", sectorsIdentified: false };
   }
 };
 
 export const analyzeScore = async (base64Image: string): Promise<VisionResponse> => {
   try {
-    const { enhanced, edges } = await preprocessDartImage(base64Image);
+    // 1. Pre-processing rapido (singola immagine)
+    const { enhanced } = await preprocessDartImage(base64Image);
     const cleanEnhanced = enhanced.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
-    const cleanEdges = edges.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
+    // 2. Chiamata a Gemini 3 Flash (High Speed)
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanEnhanced } },
-          { inlineData: { mimeType: "image/jpeg", data: cleanEdges } },
-          { text: "Analizza posizione punte freccette rispetto allo spider. Restituisci JSON con zone e coordinate." }
+          { text: "Arbitro: identifica zona e coordinate (0-1000) delle freccette. Rispondi solo JSON." }
         ]
       },
       config: {
-        thinkingConfig: { thinkingBudget: 24000 },
-        maxOutputTokens: 30000,
+        thinkingConfig: { thinkingBudget: 0 }, // ZERO LATENCY THINKING
         responseMimeType: "application/json",
         responseSchema: scoringSchema
       }
@@ -82,7 +79,6 @@ export const analyzeScore = async (base64Image: string): Promise<VisionResponse>
 
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
-    console.error("Score Error:", error);
-    return { detected: false, message: "Errore analisi.", totalScore: 0, darts: [] };
+    return { detected: false, message: "Error", totalScore: 0, darts: [] };
   }
 };

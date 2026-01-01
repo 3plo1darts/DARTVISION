@@ -1,42 +1,26 @@
 /**
- * Utility for pre-processing images to improve AI detection reliability.
- * Focuses on contrast enhancement and edge isolation for dartboard "spider" recognition.
+ * Utility ultra-leggera per il pre-processing.
+ * Si limita a migliorare il contrasto per l'AI senza calcoli pesanti sui bordi.
  */
-
-export const preprocessDartImage = async (base64: string): Promise<{ enhanced: string; edges: string }> => {
+export const preprocessDartImage = async (base64: string): Promise<{ enhanced: string }> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const ctx = canvas.getContext('2d');
       if (!ctx) return reject('No context');
 
-      canvas.width = img.width;
-      canvas.height = img.height;
+      // Risoluzione bilanciata: sufficiente per vedere lo spider, leggera da inviare
+      const MAX_WIDTH = 1280;
+      const scale = Math.min(1, MAX_WIDTH / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
 
-      // 1. Generate ENHANCED version (Boosted Contrast & Sharpness)
-      ctx.filter = 'contrast(1.4) brightness(1.1) saturate(1.2) sharpness(1.0)';
-      ctx.drawImage(img, 0, 0);
-      const enhanced = canvas.toDataURL('image/jpeg', 0.85);
-
-      // 2. Generate EDGE version (Basic Sobel-like edge detection)
-      // We'll use a grayscale + high-contrast approach for better edge visibility
-      ctx.filter = 'grayscale(1) contrast(3) invert(0)';
-      ctx.drawImage(img, 0, 0);
+      // Miglioramento visivo rapido (hardware accelerated in molti browser)
+      ctx.filter = 'contrast(1.3) brightness(1.1) sharpness(1.0)';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // Simple Laplacian-like edge detection pass (high-pass filter)
-      // This helps emphasize the metal "spider" grid
-      for (let i = 0; i < data.length; i += 4) {
-        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        data[i] = data[i+1] = data[i+2] = avg > 180 ? 255 : 0; // Thresholding for clean edges
-      }
-      ctx.putImageData(imageData, 0, 0);
-      const edges = canvas.toDataURL('image/jpeg', 0.6);
-
-      resolve({ enhanced, edges });
+      resolve({ enhanced: canvas.toDataURL('image/jpeg', 0.7) });
     };
     img.onerror = reject;
     img.src = base64;
