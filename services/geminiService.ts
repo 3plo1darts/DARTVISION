@@ -7,20 +7,20 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const scoringSchema = {
   type: Type.OBJECT,
   properties: {
-    detected: { type: Type.BOOLEAN },
-    message: { type: Type.STRING },
+    detected: { type: Type.BOOLEAN, description: "True se il bersaglio è visibile." },
+    message: { type: Type.STRING, description: "Feedback testuale." },
     darts: {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
-          zone: { type: Type.STRING },
-          score: { type: Type.NUMBER },
+          zone: { type: Type.STRING, description: "Zona colpita (es. T20, D15, Bull)." },
+          score: { type: Type.NUMBER, description: "Punteggio numerico." },
           coordinates: {
             type: Type.OBJECT,
             properties: {
-              x: { type: Type.NUMBER },
-              y: { type: Type.NUMBER }
+              x: { type: Type.NUMBER, description: "Coordinata X (0-1000)." },
+              y: { type: Type.NUMBER, description: "Coordinata Y (0-1000)." }
             },
             required: ["x", "y"]
           }
@@ -28,7 +28,7 @@ const scoringSchema = {
         required: ["zone", "score", "coordinates"]
       }
     },
-    totalScore: { type: Type.NUMBER }
+    totalScore: { type: Type.NUMBER, description: "Somma dei punti delle freccette rilevate." }
   },
   required: ["detected", "message", "darts", "totalScore"]
 };
@@ -41,7 +41,7 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } },
-          { text: "Target present? JSON: {detected:bool, message:string}" }
+          { text: "È presente un bersaglio da freccette? I settori (1-20, double, triple) sono chiaramente identificabili? Rispondi in JSON: {detected: boolean, sectorsIdentified: boolean, message: string}" }
         ]
       },
       config: {
@@ -57,21 +57,25 @@ export const analyzeCalibration = async (base64Image: string): Promise<VisionRes
 
 export const analyzeScore = async (base64Image: string): Promise<VisionResponse> => {
   try {
-    // 1. Pre-processing rapido (singola immagine)
-    const { enhanced } = await preprocessDartImage(base64Image);
+    // 1. Pipeline di pre-processing avanzata: otteniamo versione a colori e mappa dei bordi
+    const { enhanced, edges } = await preprocessDartImage(base64Image);
     const cleanEnhanced = enhanced.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
+    const cleanEdges = edges.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
-    // 2. Chiamata a Gemini 3 Flash (High Speed)
+    // 2. Chiamata a Gemini 3 Flash con multi-modal input
+    // L'immagine 'edges' aiuta il modello a isolare le aste sottili delle freccette
+    // L'immagine 'enhanced' aiuta a distinguere i colori dei settori (rosso/verde)
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: cleanEnhanced } },
-          { text: "Arbitro: identifica zona e coordinate (0-1000) delle freccette. Rispondi solo JSON." }
+          { inlineData: { mimeType: "image/jpeg", data: cleanEdges } },
+          { text: "Analizza le due immagini: la prima è a colori contrastati, la seconda è una mappa dei bordi. Identifica le freccette conficcate, calcola la zona e le coordinate relative (0-1000). Rispondi esclusivamente in formato JSON." }
         ]
       },
       config: {
-        thinkingConfig: { thinkingBudget: 0 }, // ZERO LATENCY THINKING
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: scoringSchema
       }
@@ -79,6 +83,7 @@ export const analyzeScore = async (base64Image: string): Promise<VisionResponse>
 
     return JSON.parse(response.text || '{}') as VisionResponse;
   } catch (error) {
+    console.error("Scoring Error:", error);
     return { detected: false, message: "Error", totalScore: 0, darts: [] };
   }
 };

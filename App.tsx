@@ -25,10 +25,14 @@ const App: React.FC = () => {
     try {
       if (phase === AppPhase.CALIBRATION) {
         const result = await analyzeCalibration(imageData);
-        if (result.detected) {
+        if (result.detected && result.sectorsIdentified) {
           playSuccessChime();
           setPhase(AppPhase.GAME);
+          setStatusMsg("");
           addLog("Sistema Pronto", 'success');
+        } else if (result.detected && !result.sectorsIdentified) {
+          setStatusMsg("Bersaglio Non Riconosciuto");
+          addLog("Settori non identificabili", 'error');
         } else {
           setStatusMsg("Centra il bersaglio...");
         }
