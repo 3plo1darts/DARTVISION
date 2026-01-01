@@ -3,28 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- PWA / iOS Home Screen Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DartVision">
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple Touch Icon (SVG Dartboard stilizzato) -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExNSIgZmlsbD0iIzAxMDEwMSIvPgogIDxjaXJjbGUgY3g9IjI1NiIgY3k9IjI1NiIgcj0iMTgwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iNDAiLz4KICA8Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjEyMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZGMyNjI2IiBzdHJva2Utd2lkdGg9IjQwIi8+CiAgPGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSI2MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQwIi8+CiAgPGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxNSIgZmlsbD0iI2RjMjYyNiIvPgogIDxwYXRoIGQ9Ik0yNTYgMTIwdjI3Mk0xMjAgMjU2aDI3MiIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1vcGFjaXR5PSIuMiIvPgo8L3N2Zz4=">
+
     <title>DartVision Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+      
+      :root {
+        --safe-area-inset-bottom: env(safe-area-inset-bottom);
+        --safe-area-inset-top: env(safe-area-inset-top);
+      }
+
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #030712;
+        background-color: #000000;
         color: #f3f4f6;
-        overscroll-behavior-y: contain;
-        touch-action: manipulation;
+        margin: 0;
+        padding: 0;
+        overscroll-behavior: none;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
       }
+
       .font-mono {
         font-family: 'JetBrains Mono', monospace;
       }
-      /* Custom scrollbar for mobile */
-      ::-webkit-scrollbar {
-        width: 4px;
+
+      .pb-safe {
+        padding-bottom: calc(1rem + var(--safe-area-inset-bottom));
       }
-      ::-webkit-scrollbar-thumb {
-        background: #374151;
-        border-radius: 10px;
+      .pt-safe {
+        padding-top: calc(0.75rem + var(--safe-area-inset-top));
       }
     </style>
   <script type="importmap">
