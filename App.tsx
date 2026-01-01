@@ -38,28 +38,24 @@ const App: React.FC = () => {
         const result = await analyzeScore(imageData);
         
         if (result.detected && result.darts) {
+          // AGGIORNAMENTO IMMEDIATO: Mostriamo subito le freccette rilevate sulla telecamera
+          setCurrentDarts(result.darts);
+          
           const currentReading = result.totalScore || 0;
           
-          // Logica di stabilità: aggiungiamo al buffer
+          // Logica di stabilità per il punteggio numerico
           lastScoreBuffer.current.push(currentReading);
           if (lastScoreBuffer.current.length > 2) lastScoreBuffer.current.shift();
 
-          // Aggiorniamo il punteggio solo se stabile (2 letture uguali) o se è la prima lettura
           const isStable = lastScoreBuffer.current.length === 1 || lastScoreBuffer.current.every(v => v === currentReading);
 
-          if (isStable) {
-            if (currentReading !== totalScore) {
-              setTotalScore(currentReading);
-              setCurrentDarts(result.darts);
-              playBeep(80, 1100);
-              addLog(`Tiro confermato: ${currentReading} pt`, 'success');
-            } else {
-              // Aggiorna solo le posizioni visive per fluidità
-              setCurrentDarts(result.darts);
-            }
+          if (isStable && currentReading !== totalScore) {
+            setTotalScore(currentReading);
+            playBeep(80, 1100);
+            addLog(`Tiro confermato: ${currentReading} pt`, 'success');
           }
         }
-        setStatusMsg(isProcessing ? "AI: Ragionamento..." : "In attesa...");
+        setStatusMsg("");
       }
     } catch (err) {
       addLog("Errore di rete AI", 'error');
@@ -135,7 +131,7 @@ const App: React.FC = () => {
             <div className="flex flex-col items-end gap-4">
               <div className="flex gap-2 flex-wrap justify-end max-w-[200px]">
                 {currentDarts.length > 0 ? currentDarts.slice(-3).map((d, i) => (
-                  <div key={i} className="px-4 py-2 bg-white/5 border border-white/10 rounded-2xl text-sm font-black text-red-600 shadow-xl flex flex-col items-center">
+                  <div key={`${i}-${d.zone}`} className="px-4 py-2 bg-white/5 border border-white/10 rounded-2xl text-sm font-black text-red-600 shadow-xl flex flex-col items-center animate-[bounceIn_0.5s_ease-out]">
                     <span className="text-[8px] text-gray-500 mb-0.5">DART {i+1}</span>
                     {d.zone}
                   </div>
@@ -173,6 +169,12 @@ const App: React.FC = () => {
         @keyframes scroll {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
+        }
+        @keyframes bounceIn {
+          0% { opacity: 0; transform: scale(0.3); }
+          50% { opacity: 0.9; transform: scale(1.1); }
+          80% { opacity: 1; transform: scale(0.89); }
+          100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>
